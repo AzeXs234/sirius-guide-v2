@@ -239,28 +239,4 @@ window.closeModal = closeModal;
 window.handleImageUpload = handleImageUpload;
 window.handleImageError = handleImageError;
 
-// ТЕСТ: проверим подключение к JSONBin
-async function testJSONBin() {
-  try {
-    console.log('Пробуем загрузить из JSONBin...');
-    const response = await fetch(`https://api.jsonbin.io/v3/b/${BIN_ID}/latest`, {
-      headers: {
-        'X-Master-Key': API_KEY
-      }
-    });
-    
-    if (!response.ok) {
-      console.error('Ошибка HTTP:', response.status);
-      return;
-    }
-    
-    const data = await response.json();
-    console.log('✅ Успех! Данные из JSONBin:', data);
-    console.log('Количество мест:', data.record.length);
-  } catch (e) {
-    console.error('❌ Ошибка подключения:', e);
-  }
-}
 
-// Запустим тест через 2 секунды после загрузки
-setTimeout(testJSONBin, 2000);
