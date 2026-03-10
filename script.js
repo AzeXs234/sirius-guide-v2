@@ -1,41 +1,17 @@
-const BIN_ID = '69b06f2684682b35628670ff';
-const API_KEY = '$2a$10$9W9QC/Er99War3q5MakpfuXOjjLdf/QBg5ovYQHU9jOEdyJQ3jfAC';
+// Загрузка данных
+let placesData;
 
-let placesData = [];
-
-// Загрузка данных с сервера
-async function loadPlaces() {
-  try {
-    const response = await fetch(`https://api.jsonbin.io/v3/b/${BIN_ID}/latest`, {
-      headers: {
-        'X-Master-Key': API_KEY
-      }
-    });
-    const data = await response.json();
-    placesData = data.record;
-    renderPlaces(document.getElementById('categoryFilter').value);
-  } catch (e) {
-    console.error('Ошибка загрузки данных, использую локальные:', e);
-    placesData = [...places];
-    renderPlaces(document.getElementById('categoryFilter').value);
-  }
+try {
+  const savedData = localStorage.getItem('sirius-places');
+  placesData = savedData ? JSON.parse(savedData) : [...places];
+} catch (e) {
+  console.error("Ошибка загрузки данных, используется стандартный набор", e);
+  placesData = [...places];
 }
 
-// Сохранение данных на сервер
-async function savePlaces() {
-  try {
-    await fetch(`https://api.jsonbin.io/v3/b/${BIN_ID}`, {
-      method: 'PUT',
-      headers: {
-        'Content-Type': 'application/json',
-        'X-Master-Key': API_KEY
-      },
-      body: JSON.stringify(placesData)
-    });
-    console.log('Данные сохранены');
-  } catch (e) {
-    console.error('Ошибка сохранения:', e);
-  }
+// Сохранение данных
+function saveData() {
+  localStorage.setItem('sirius-places', JSON.stringify(placesData));
 }
 
 // Расчёт рейтинга
@@ -67,21 +43,6 @@ function handleImageUpload(event, placeId) {
   reader.readAsDataURL(file);
 }
 
-// Функция для корректного получения пути к изображению
-function getImagePath(photo) {
-  if (!photo) return 'images/no-image.jpg';
-  if (photo.startsWith('images/') || photo.startsWith('http')) {
-    return photo;
-  }
-  return `images/${photo}`;
-}
-
-// Обработчик ошибок загрузки изображения
-function handleImageError(img) {
-  img.onerror = null;
-  img.src = 'images/no-image.jpg';
-}
-
 // Отображение мест
 function renderPlaces(category = 'all') {
   const filtered = category === 'all' 
@@ -99,11 +60,26 @@ function renderPlaces(category = 'all') {
         <p class="address">${place.address}</p>
         <div class="rating-section">
           ${place.rating > 0 ? '★'.repeat(Math.round(place.rating)) + ` ${Number(place.rating).toFixed(1)}` : 'Нет оценок'}
-          <small>${place.reviews ? place.reviews.length : 0} отзывов</small>
+          <small>${place.reviews.length} отзывов</small>
         </div>
       </div>
     </div>
   `).join('');
+}
+
+// Функция для корректного получения пути к изображению
+function getImagePath(photo) {
+  if (!photo) return 'images/no-image.jpg';
+  if (photo.startsWith('images/') || photo.startsWith('http')) {
+    return photo;
+  }
+  return `images/${photo}`;
+}
+
+// Обработчик ошибок загрузки изображения
+function handleImageError(img) {
+  img.onerror = null;
+  img.src = 'images/no-image.jpg';
 }
 
 // Модальное окно
@@ -133,8 +109,8 @@ function showPlaceDetails(placeId) {
         <p class="description">${place.description}</p>
         
         <div class="reviews-section">
-          <h3>Отзывы (${place.reviews ? place.reviews.length : 0})</h3>
-          ${place.reviews && place.reviews.length > 0 ? place.reviews.map(review => `
+          <h3>Отзывы (${place.reviews.length})</h3>
+          ${place.reviews.map(review => `
             <div class="review" id="review-${review.id}">
               <div class="review-header">
                 <span>${review.author}</span>
@@ -145,7 +121,7 @@ function showPlaceDetails(placeId) {
               ${review.image ? `<img src="${review.image}" class="review-image" onerror="this.style.display='none'">` : ''}
               <small>${review.date}</small>
             </div>
-          `).join('') : '<p>Пока нет отзывов. Будьте первым!</p>'}
+          `).join('')}
           
           <div class="add-review">
             <h3>Оставить отзыв</h3>
@@ -177,8 +153,20 @@ function showPlaceDetails(placeId) {
   document.body.style.overflow = 'hidden';
 }
 
-// Добавление отзыва
-async function addReview() {
+// Функция удаления отзыва
+function deleteReview(placeId, reviewId) {
+  if (!confirm('Вы уверены, что хотите удалить этот отзыв?')) return;
+  
+  const place = placesData.find(p => p.id === placeId);
+  if (!place) return;
+  
+  place.reviews = place.reviews.filter(r => r.id !== reviewId);
+  place.rating = calculateRating(place.reviews);
+  saveData();
+  showPlaceDetails(placeId);
+}
+
+function addReview() {
   const place = placesData.find(p => p.id === currentPlaceId);
   if (!place) return;
   
@@ -188,13 +176,11 @@ async function addReview() {
     return;
   }
 
-  if (!place.reviews) place.reviews = [];
-
   const imageInput = document.getElementById(`review-image-${currentPlaceId}`);
   
-  if (imageInput && imageInput.files[0]) {
+  if (imageInput.files[0]) {
     const reader = new FileReader();
-    reader.onload = async function(e) {
+    reader.onload = function(e) {
       place.reviews.push({
         id: Date.now(),
         author: document.getElementById('review-author').value || 'Аноним',
@@ -203,7 +189,7 @@ async function addReview() {
         image: e.target.result,
         date: new Date().toLocaleDateString('ru-RU')
       });
-      await updatePlaceData(place);
+      updatePlaceData(place);
     };
     reader.readAsDataURL(imageInput.files[0]);
   } else {
@@ -215,25 +201,13 @@ async function addReview() {
       image: null,
       date: new Date().toLocaleDateString('ru-RU')
     });
-    await updatePlaceData(place);
+    updatePlaceData(place);
   }
 }
 
-// Удаление отзыва
-async function deleteReview(placeId, reviewId) {
-  if (!confirm('Вы уверены, что хотите удалить этот отзыв?')) return;
-  
-  const place = placesData.find(p => p.id === placeId);
-  if (!place) return;
-  
-  place.reviews = place.reviews.filter(r => r.id !== reviewId);
-  await updatePlaceData(place);
-}
-
-// Обновление данных
-async function updatePlaceData(place) {
+function updatePlaceData(place) {
   place.rating = calculateRating(place.reviews);
-  await savePlaces();
+  saveData();
   closeModal();
   renderPlaces(document.getElementById('categoryFilter').value);
 }
@@ -254,7 +228,7 @@ document.addEventListener('DOMContentLoaded', function() {
       renderPlaces(e.target.value);
     });
   }
-  loadPlaces();
+  renderPlaces();
 });
 
 // Делаем функции глобальными
