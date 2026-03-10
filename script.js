@@ -1,3 +1,5 @@
+const BIN_ID = '69b06f2684682b35628670ff';
+const API_KEY = '$2a$10$9W9QC/Er99War3q5MakpfuXOjjLdf/QBg5ovYQHU9jOEdyJQ3jfAC';
 // Загрузка данных
 let placesData;
 
