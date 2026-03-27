@@ -1,42 +1,17 @@
-// ===== НАСТРОЙКИ JSONBIN =====
-const BIN_ID = '69b06f2684682b35628670ff';
-const API_KEY = '$2a$10$9W9QC/Er99War3q5MakpfuXOjjLdf/QBg5ovYQHU9jOEdyJQ3jfAC';
+/// Загрузка данных
+let placesData;
 
-let placesData = [];
-
-// Загрузка данных с сервера
-async function loadPlaces() {
-  try {
-    const response = await fetch(`https://api.jsonbin.io/v3/b/${BIN_ID}/latest`, {
-      headers: {
-        'X-Master-Key': API_KEY
-      }
-    });
-    const data = await response.json();
-    placesData = data.record;
-    renderPlaces(document.getElementById('categoryFilter').value);
-  } catch (e) {
-    console.error('Ошибка загрузки данных, использую локальные:', e);
-    placesData = [...places];
-    renderPlaces(document.getElementById('categoryFilter').value);
-  }
+try {
+  const savedData = localStorage.getItem('sirius-places');
+  placesData = savedData ? JSON.parse(savedData) : [...places];
+} catch (e) {
+  console.error("Ошибка загрузки данных, используется стандартный набор", e);
+  placesData = [...places];
 }
 
-// Сохранение данных на сервер
-async function savePlaces() {
-  try {
-    await fetch(`https://api.jsonbin.io/v3/b/${BIN_ID}`, {
-      method: 'PUT',
-      headers: {
-        'Content-Type': 'application/json',
-        'X-Master-Key': API_KEY
-      },
-      body: JSON.stringify(placesData)
-    });
-    console.log('✅ Данные сохранены в JSONBin');
-  } catch (e) {
-    console.error('❌ Ошибка сохранения:', e);
-  }
+// Сохранение данных
+function saveData() {
+  localStorage.setItem('sirius-places', JSON.stringify(placesData));
 }
 
 // Расчёт рейтинга
@@ -76,6 +51,11 @@ function renderPlaces(category = 'all') {
   
   const placesList = document.getElementById('placesList');
   if (!placesList) return;
+  
+  if (!placesData || placesData.length === 0) {
+    placesList.innerHTML = '<p style="text-align:center; padding:40px;">Нет данных</p>';
+    return;
+  }
   
   placesList.innerHTML = filtered.map(place => `
     <div class="place-card" onclick="showPlaceDetails(${place.id})">
@@ -161,7 +141,7 @@ function showPlaceDetails(placeId) {
             <textarea id="review-text" placeholder="Ваш отзыв..." required></textarea>
             <div class="review-image-upload">
               <input type="file" id="review-image-${place.id}" 
-                     accept="image/jpeg, image/png, image/webg, image/gif"
+                     accept="image/jpeg, image/png, image/webp, image/gif"
                      onchange="handleImageUpload(event, ${place.id})" 
                      style="display: none;">
               <label for="review-image-${place.id}">Прикрепить фото</label>
@@ -179,7 +159,7 @@ function showPlaceDetails(placeId) {
 }
 
 // Добавление отзыва
-async function addReview() {
+function addReview() {
   const place = placesData.find(p => p.id === currentPlaceId);
   if (!place) return;
   
@@ -195,7 +175,7 @@ async function addReview() {
   
   if (imageInput && imageInput.files[0]) {
     const reader = new FileReader();
-    reader.onload = async function(e) {
+    reader.onload = function(e) {
       place.reviews.push({
         id: Date.now(),
         author: document.getElementById('review-author').value || 'Аноним',
@@ -204,7 +184,7 @@ async function addReview() {
         image: e.target.result,
         date: new Date().toLocaleDateString('ru-RU')
       });
-      await updatePlaceData(place);
+      updatePlaceData(place);
     };
     reader.readAsDataURL(imageInput.files[0]);
   } else {
@@ -216,25 +196,25 @@ async function addReview() {
       image: null,
       date: new Date().toLocaleDateString('ru-RU')
     });
-    await updatePlaceData(place);
+    updatePlaceData(place);
   }
 }
 
 // Удаление отзыва
-async function deleteReview(placeId, reviewId) {
+function deleteReview(placeId, reviewId) {
   if (!confirm('Вы уверены, что хотите удалить этот отзыв?')) return;
   
   const place = placesData.find(p => p.id === placeId);
   if (!place) return;
   
   place.reviews = place.reviews.filter(r => r.id !== reviewId);
-  await updatePlaceData(place);
+  updatePlaceData(place);
 }
 
 // Обновление данных
-async function updatePlaceData(place) {
+function updatePlaceData(place) {
   place.rating = calculateRating(place.reviews);
-  await savePlaces();
+  saveData();
   closeModal();
   renderPlaces(document.getElementById('categoryFilter').value);
 }
@@ -247,29 +227,6 @@ function closeModal() {
   }
 }
 
-// ТЕСТОВАЯ ФУНКЦИЯ
-async function testJSONBin() {
-  try {
-    console.log('Пробуем загрузить из JSONBin...');
-    const response = await fetch(`https://api.jsonbin.io/v3/b/${BIN_ID}/latest`, {
-      headers: {
-        'X-Master-Key': API_KEY
-      }
-    });
-    
-    if (!response.ok) {
-      console.error('❌ Ошибка HTTP:', response.status);
-      return;
-    }
-    
-    const data = await response.json();
-    console.log('✅ Успех! Данные из JSONBin:', data);
-    console.log('Количество мест:', data.record.length);
-  } catch (e) {
-    console.error('❌ Ошибка подключения:', e);
-  }
-}
-
 // Инициализация
 document.addEventListener('DOMContentLoaded', function() {
   const categoryFilter = document.getElementById('categoryFilter');
@@ -278,8 +235,7 @@ document.addEventListener('DOMContentLoaded', function() {
       renderPlaces(e.target.value);
     });
   }
-  loadPlaces();
-  setTimeout(testJSONBin, 2000);
+  renderPlaces();
 });
 
 // Делаем функции глобальными
